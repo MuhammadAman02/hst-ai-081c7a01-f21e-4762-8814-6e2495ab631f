@@ -1,44 +1,62 @@
-from fastapi import Request
-from fastapi.responses import HTMLResponse
-from . import router
-from .. import templates
-import os
-from datetime import datetime
+from nicegui import ui
+from fastapi import APIRouter, UploadFile, File
+from app.models.document import CustomerApplication, Document
+from app.api.routes import validate_application
+import aiohttp
+import json
+from datetime import date
 
-@router.get('/', response_class=HTMLResponse)
-async def index(request: Request):
-    """Serves the main index page using Jinja2 templates."""
-    import logging
-    logger = logging.getLogger(__name__)
+router = APIRouter()
 
-    if not templates:
-        error_msg = "Templates support is not configured. Check app/__init__.py."
-        logger.error(error_msg)
-        # Consider raising an HTTPException or returning a more structured error
-        return HTMLResponse(
-            content=f"<html><body><h1>Configuration Error</h1><p>{error_msg}</p></body></html>",
-            status_code=500
+@router.get("/")
+async def index():
+    async def handle_submit():
+        documents = []
+        for file in uploaded_files:
+            async with aiohttp.ClientSession() as session:
+                data = aiohttp.FormData()
+                data.add_field('file', file.content, filename=file.name, content_type=file.type)
+                async with session.post('http://localhost:8000/api/upload-document', data=data) as response:
+                    document = await response.json()
+                    documents.append(Document(**document))
+        
+        application = CustomerApplication(
+            id=str(uuid.uuid4()),
+            customer_name=name.value,
+            date_of_birth=date.fromisoformat(dob.value),
+            pps_number=pps.value,
+            documents=documents
         )
+        
+        results = await validate_application(application)
+        
+        result_text = "Validation Results:\n"
+        for result in results:
+            result_text += f"Document {result.document_id}:\n"
+            result_text += f"Valid: {result.is_valid}\n"
+            if result.errors:
+                result_text += "Errors:\n" + "\n".join(result.errors) + "\n"
+            if result.warnings:
+                result_text += "Warnings:\n" + "\n".join(result.warnings) + "\n"
+            result_text += "\n"
+        
+        ui.notify(result_text)
 
-    try:
-        # The existence of 'templates' object implies it's configured.
-        # FastAPI/Starlette's Jinja2Templates will raise an internal error if the specific template is not found.
-        # This will be caught by the generic exception handler.
-        logger.info(f"Attempting to render index.html")
-        return templates.TemplateResponse("index.html", {
-            "request": request,
-            "current_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        })
-    except Exception as e:
-        # This will catch errors if index.html is missing or if there's a rendering error within the template itself.
-        # The generic error handler in error_handling.py should ideally log this.
-        error_msg = f"Error rendering template 'index.html': {str(e)}"
-        logger.exception(error_msg) # Log with stack trace
-        # It's often better to let the centralized error handlers deal with the response
-        # For now, returning a simple HTML error for clarity during development.
-        return HTMLResponse(
-            content=f"<html><body><h1>Application Error</h1><p>Could not render the page. Please check logs.</p></body></html>",
-            status_code=500
-        )
+    with ui.card():
+        ui.label('Document Validation Application').classes('text-h4')
+        name = ui.input('Customer Name')
+        dob = ui.input('Date of Birth', input_type='date')
+        pps = ui.input('PPS Number')
+        uploaded_files = ui.upload(multiple=True, label='Upload Documents').props('accept=.pdf,.jpg,.png')
+        ui.button('Submit', on_click=handle_submit)
 
-# Add additional frontend routes here using the @router decorator
+    ui.run()
+
+@router.get("/results")
+async def results():
+    with ui.card():
+        ui.label('Validation Results').classes('text-h4')
+        # This is a placeholder. In a real application, you would fetch and display actual results here.
+        ui.label('No results to display.')
+
+    ui.run()
