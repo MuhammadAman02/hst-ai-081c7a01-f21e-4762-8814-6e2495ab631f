@@ -16,11 +16,10 @@ from .core.error_handling import register_exception_handlers
 logger = get_logger(__name__)
 
 app = FastAPI(
-    title=settings.APP_NAME, # Use setting for title
-    description="Enterprise-ready FastAPI application base.",
+    title=settings.APP_NAME,
+    description="Secure document validation application for Credit Unions",
     version="1.0.0",
-    debug=settings.DEBUG, # Use setting for debug mode
-    # Add other FastAPI parameters if needed, e.g., lifespan context managers for DB connections
+    debug=settings.DEBUG,
 )
 
 # Mount static files directory
@@ -40,17 +39,13 @@ else:
     templates = None
     logger.warning(f"Templates directory not found at {templates_dir}. Create it if you need to use Jinja2 templates.")
 
-# Import and include routers after app creation
+# Import and include routers
 from .api import routes as api_routes
 from .frontend import routes as frontend_routes
 
 # Include routers
 app.include_router(api_routes.router, prefix="/api", tags=["api"])
 app.include_router(frontend_routes.router, tags=["frontend"])
-
-# Note: The application is designed to be extensible.
-# When AI-generated code is added, it can be placed in the 'generated' directory
-# and imported here with its own router.
 
 # Register custom exception handlers
 register_exception_handlers(app)
@@ -59,9 +54,9 @@ register_exception_handlers(app)
 @app.get("/")
 async def read_root():
     logger.info("Root endpoint accessed.")
-    return {"message": "Welcome to the FastAPI application!"}
+    return {"message": "Welcome to the Secure Document Validation Application!"}
 
-# --- Startup and Shutdown Events ---
+# Startup and Shutdown Events
 @app.on_event("startup")
 async def startup_event():
     logger.info(f"Starting {settings.APP_NAME} v{settings.APP_VERSION} ({settings.APP_ENV})")
